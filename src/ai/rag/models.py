@@ -12,3 +12,8 @@ class DocumentChunk:
 @dataclass
 class RetrievalResult:
     chunks: List[DocumentChunk]
+
+@dataclass
+class DocumentChunkEmbedding:
+    document_chunk: DocumentChunk
+    embedding: List[float]
