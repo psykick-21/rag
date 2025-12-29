@@ -20,42 +20,47 @@ Engineering teams accumulate large amounts of technical documentation (APIs, des
 
 ```
 rag/
-├── main.py                 # Application entry point
 ├── pyproject.toml          # Project dependencies and configuration
+├── uv.lock                 # Lock file for dependency versions
 ├── README.md               # Project documentation
 │
 ├── src/
 │   ├── ai/
+│   │   ├── __init__.py
 │   │   └── rag/
+│   │       ├── __init__.py
 │   │       ├── generator.py        # LLM response generation
 │   │       ├── models.py            # Data models and schemas
 │   │       ├── orchestrator.py     # RAG orchestration logic
 │   │       ├── prompt_compiler.py  # Prompt construction
 │   │       └── retriever.py        # Document retrieval logic
 │   │
-│   └── api/
-│       ├── app.py                  # FastAPI application setup
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── app.py                  # FastAPI application setup
+│   │   │
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── health.py           # Health check endpoint
+│   │   │   └── chat.py             # Chat API endpoint
+│   │   │
+│   │   ├── models/
+│   │   │   └── __init__.py         # Pydantic schemas
+│   │   │
+│   │   ├── utils/
+│   │   │   └── __init__.py         # Utility functions
+│   │   │
+│   │   └── middleware/
+│   │       ├── __init__.py
+│   │       ├── cors.py             # CORS configuration
+│   │       └── logging.py          # Request/response logging
+│   │
+│   └── db/
 │       ├── __init__.py
-│       │
-│       ├── routers/
-│       │   ├── __init__.py
-│       │   ├── health.py           # Health check endpoint
-│       │   └── chat.py             # Chat API endpoint
-│       │
-│       ├── models/
-│       │   └── __init__.py         # Pydantic schemas
-│       │
-│       ├── utils/
-│       │   └── __init__.py         # Utility functions
-│       │
-│       └── middleware/
-│           ├── __init__.py
-│           ├── cors.py             # CORS configuration
-│           └── logging.py          # Request/response logging
+│       └── connection.py           # Database connection setup
 │
-├── docs/
-│   └── Explanations.md     # Technical documentation
-│
-└── daily_logs/
-    └── day_01.md           # Development logs
+└── docs/
+    ├── daily_logs.md               # Development logs
+    ├── Explanations.md             # Technical documentation
+    └── ingestion_assumptions.md    # Document ingestion assumptions
 ```
