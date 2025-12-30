@@ -8,10 +8,15 @@ class DocumentChunk:
     source: str
     metadata: Optional[Dict[str, Any]] = None
 
+@dataclass
+class RetrievedDocumentChunk:
+    chunk: DocumentChunk
+    distance: float
 
 @dataclass
 class RetrievalResult:
-    chunks: List[DocumentChunk]
+    chunks: List[RetrievedDocumentChunk]
+
 
 @dataclass
 class DocumentChunkEmbedding:
