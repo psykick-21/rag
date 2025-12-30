@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from src.ai.rag.models import DocumentChunk
+from src.ai.rag.models import RetrievedDocumentChunk
 
 class PromptCompiler:
     """
@@ -10,7 +10,7 @@ class PromptCompiler:
     @staticmethod
     def compile(
         query: str,
-        context: List[DocumentChunk],
+        context: List[RetrievedDocumentChunk],
     ) -> Tuple[str, str]:
         """
         Builds system and user prompts for grounded RAG answering.
@@ -32,7 +32,7 @@ class PromptCompiler:
 
         context_block = "\n\n".join(
             [
-                f"Document Chunk {i+1}:\n{chunk.content}"
+                f"Document Chunk {i+1}:\n{chunk.chunk.content}"
                 for i, chunk in enumerate(context)
             ]
         )

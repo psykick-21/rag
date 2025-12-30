@@ -1,13 +1,18 @@
 from src.ai.rag.models import RetrievalResult
-from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding
+from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding, RetrievedDocumentChunk
 from src.db.connection import conn
+from src.utils.logger import getLogger
 
 from typing import List
 from openai import OpenAI
 from pgvector.psycopg import Vector
 from dotenv import load_dotenv
+import os
+from pathlib import Path
+from tqdm import tqdm
 
 load_dotenv()
+logger = getLogger(__name__)
 
 
 class Retriever:
@@ -15,7 +20,7 @@ class Retriever:
     Responsible only for retrieving relevant document chunks.
     """
 
-    def retrieve(self, query: str, top_k: int = 3) -> RetrievalResult:
+    def retrieve(self, query: str, top_k: int = 5) -> RetrievalResult:
         """Retrieves the relevant document chunks using the OpenAI API."""
 
         client = OpenAI()
@@ -28,19 +33,25 @@ class Retriever:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT *
+                SELECT *, embedding <=> %s AS distance
                 FROM file_chunks
-                ORDER BY embedding <-> %s
+                ORDER BY distance ASC
                 LIMIT %s
                 """,
                 (Vector(query_embedding), top_k)
             )
             fetched_chunks = cursor.fetchall()
-            chunks = [DocumentChunk(
+            chunks = [RetrievedDocumentChunk(
+                chunk=DocumentChunk(
                 content=chunk[3],
-                source=chunk[1],
-                metadata={"chunk_index": chunk[2]}
+                    source=chunk[1],
+                    metadata={"chunk_index": chunk[2]}
+                ),
+                distance=chunk[6]
             ) for chunk in fetched_chunks]
+
+        logger.info(f"Retrieved {len(chunks)} chunks for query: {query}")
+        logger.info("\n".join([f"Source: {chunk.chunk.source} - Chunk Index: {chunk.chunk.metadata['chunk_index']} - Distance: {chunk.distance}" for chunk in chunks]))
 
         return RetrievalResult(chunks=chunks)
 
@@ -78,7 +89,7 @@ class Retriever:
 
         embeded_chunks = []
 
-        for chunk in chunks:
+        for chunk in tqdm(chunks, desc="Embedding chunks", leave=False):
             embedding = client.embeddings.create(
                 input=chunk.content,
                 model="text-embedding-3-small"
@@ -99,7 +110,7 @@ class Retriever:
         """Saves the embeddings to the database."""
 
         with conn.cursor() as cursor:
-            for embedding in embeddings:
+            for embedding in tqdm(embeddings, desc="Saving embeddings to database", leave=False):
                 cursor.execute(
                     "INSERT INTO file_chunks (file_name, chunk_index, content, embedding) VALUES (%s, %s, %s, %s)",
                     (embedding.document_chunk.source, embedding.document_chunk.metadata["chunk_index"], embedding.document_chunk.content, embedding.embedding)
@@ -108,47 +119,39 @@ class Retriever:
 
 
 if __name__ == "__main__":
-#     document_text = """# Text Summarization API Using HuggingFace, FAST API and Deployment to AWS with CI/CD Pipeline
-
-# >***A short video demonstrating the working of the API***<br>
-# https://www.youtube.com/watch?v=QG-pj9tV81M
-
-# ## A brief workflow of the project
-# 1. Setup logging
-# 1. Getting the dataset and model from HuggingFace
-# 2. Build modules and pipelines (mentioned below in pipelines section) right from data gathering to model training and inferencing
-# 3. Use FAST API and Uvicorn to create training and inferencing endpoints.
-# 5. Deployment of the dockerized app to ECR and ECS on AWS
-# 6. Build CI/CD pipeline using GitHub Actions
-# 5. Postman for inferencing
-
-
-# ## Pipelines
-# 1. Data Ingestion
-# 2. Data Transformation
-# 3. Data Validation
-# 4. Model Training
-# 5. Model Evaluation
-# 6. Inferencing
-
-
-# ### References
-# **Model**: Hugging Face [Google Pegasus](https://huggingface.co/google/pegasus-cnn_dailymail)<br>
-# Citations:Jingqing Zhang, Yao Zhao, Mohammad Saleh, & Peter J. Liu. (2019). PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization.<br>
- 
-# **Dataset**: Hugging Face [Samsum dataset](https://huggingface.co/datasets/samsum)<br>
-# License: CC BY-NC-ND 4.0<br>
-# Citations: Gliwa, B., Mochol, I., Biesek, M., & Wawer, A. (2019). SAMSum Corpus: A Human-annotated Dialogue Dataset for Abstractive Summarization. In Proceedings of the 2nd Workshop on New Frontiers in Summarization (pp. 70–79). Association for Computational Linguistics.<br>"""
-    
-#     retriever = Retriever()
-#     chunks = retriever._chunk_document_text(document_text)
-#     embeded_chunks = retriever._embed_chunks(chunks)
-#     retriever._save_embeddings_to_db(embeded_chunks)
-
     retriever = Retriever()
-    retrieval_result = retriever.retrieve("What is the model used in the project?")
-    for i, chunk in enumerate(retrieval_result.chunks):
-        print(f"Chunk {i+1}:")
-        print(chunk.content)
-        print("-" * 100)
-        print("\n")
+    raw_docs_path = Path("data/raw_docs")
+    
+    # Collect all directories first
+    directories = [d for d in raw_docs_path.iterdir() if d.is_dir()]
+    
+    # Walk through all directories in /data/raw_docs
+    for directory in tqdm(directories, desc="Processing directories"):
+        directory_name = directory.name
+        
+        # Find all markdown files in the directory
+        md_files = list(directory.glob("*.md"))
+        
+        for md_file in tqdm(md_files, desc=f"Processing {directory_name}", leave=False):
+            file_name = md_file.name
+            
+            # Read the markdown file
+            with open(md_file, "r", encoding="utf-8") as f:
+                document_text = f.read()
+            
+            # Create source name as directory_name + file_name
+            source_name = f"{directory_name}/{file_name}"
+            
+            # Chunk the document
+            chunks = retriever._chunk_document_text(document_text)
+            
+            # Update source for each chunk
+            for chunk in chunks:
+                chunk.source = source_name
+            
+            # Embed the chunks
+            embedded_chunks = retriever._embed_chunks(chunks)
+            
+            # Save to database
+            retriever._save_embeddings_to_db(embedded_chunks)
+

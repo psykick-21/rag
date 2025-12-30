@@ -1,8 +1,10 @@
 from typing import List
 from openai import OpenAI
-from src.ai.rag.models import DocumentChunk
+from src.ai.rag.models import RetrievedDocumentChunk
 from src.ai.rag.prompt_compiler import PromptCompiler
+from src.utils.logger import getLogger
 
+logger = getLogger(__name__)
 
 class Generator:
     """
@@ -14,12 +16,12 @@ class Generator:
         self.client = OpenAI()
         self.model = model
 
-    def generate_answer(self, query: str, context: List[DocumentChunk]) -> str:
+    def generate_answer(self, query: str, context: List[RetrievedDocumentChunk]) -> str:
         """
         Generate an answer strictly using the provided context.
 
         Rules:
-        - Use ONLY the given context
+        - Use ONLY the given context chunks
         - If the answer is not present, say "I don't know"
         - Do not hallucinate or add external knowledge
         """
@@ -34,6 +36,12 @@ class Generator:
             ],
             temperature=0.0
         )
+
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
+        model_used = response.model
+
+        logger.info(f"Generated answer for query: \"{query}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
 
         answer = response.choices[0].message.content.strip()
         
