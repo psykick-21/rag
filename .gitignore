@@ -163,3 +163,5 @@ cython_debug/
 docs/
 daily_logs/
 temp.txt
+data/
+*.DS_Store
