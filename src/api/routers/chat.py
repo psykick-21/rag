@@ -2,10 +2,13 @@
 
 from src.ai.rag.retriever import Retriever
 from src.ai.rag.generator import Generator
+from src.utils.logger import getLogger
+from src.api.utils.confidence import compute_confidence
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/api/v1", tags=["chat"])
+logger = getLogger(__name__)
 
+router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 from fastapi import Query
 
@@ -22,13 +25,17 @@ async def chat(query: str = Query(..., description="The user query string")):
 
     citations = [
         {
-            "source": chunk.source,
-            "chunk_index": chunk.metadata["chunk_index"]
+            "source": chunk.chunk.source,
+            "chunk_index": chunk.chunk.metadata["chunk_index"]
         }
         for chunk in retrieval_result.chunks
     ]
+
+    scores = [chunk.distance for chunk in retrieval_result.chunks]
+    confidence = compute_confidence(scores)
     
     return {
         "answer": answer,
-        "citations": citations
+        "citations": citations,
+        "confidence": confidence
     }
