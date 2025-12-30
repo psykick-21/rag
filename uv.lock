@@ -421,6 +421,7 @@ dependencies = [
     { name = "pgvector" },
     { name = "psycopg" },
     { name = "python-dotenv" },
+    { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -431,6 +432,7 @@ requires-dist = [
     { name = "pgvector", specifier = ">=0.4.2" },
     { name = "psycopg", specifier = ">=3.3.2" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.40.0" },
 ]
 

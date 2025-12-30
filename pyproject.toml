@@ -10,5 +10,6 @@ dependencies = [
     "pgvector>=0.4.2",
     "psycopg>=3.3.2",
     "python-dotenv>=1.2.1",
+    "tqdm>=4.67.1",
     "uvicorn[standard]>=0.40.0",
 ]
