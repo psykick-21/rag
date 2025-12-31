@@ -9,8 +9,8 @@ class PromptCompiler:
 
     @staticmethod
     def compile(
-        query: str,
         context: List[RetrievedDocumentChunk],
+        sub_queries: List[str],
     ) -> Tuple[str, str]:
         """
         Builds system and user prompts for grounded RAG answering.
@@ -22,9 +22,13 @@ class PromptCompiler:
             "If the answer is not explicitly present in the context, say: \"I don't know.\""
         )
 
+        questions_list = "\n".join(
+            [f"{i+1}. {sub_q}" for i, sub_q in enumerate(sub_queries)]
+        )
+
         if not context:
             user_prompt = (
-                f"Question:\n{query}\n\n"
+                f"Answer the following questions using ONLY the context:\n{questions_list}\n\n"
                 "There is no available context.\n"
                 "Answer: I don't know."
             )
@@ -39,8 +43,8 @@ class PromptCompiler:
 
         user_prompt = (
             f"{context_block}\n\n"
-            f"Question:\n{query}\n\n"
-            "Answer the question using only the context above."
+            f"Answer the following questions using ONLY the context:\n{questions_list}\n\n"
+            "Answer each part separately. If any part cannot be answered, say \"I don't know\" for that part."
         )
 
         return system_prompt, user_prompt
