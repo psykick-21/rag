@@ -27,18 +27,20 @@ async def chat(query: str = Query(..., description="The user query string")):
         retrieval_result = retriever.retrieve(sub_query)
         retrieval_results.extend(retrieval_result.chunks)
 
+    deduplicated_retrieval_chunks = dedupe_retrieved_chunks(retrieval_results)
+    filtered_chunks = filter_top_k_chunks(deduplicated_retrieval_chunks)
     
-    answer = generator.generate_answer(query, retrieval_result.chunks)
+    answer = generator.generate_answer(filtered_chunks, sub_queries)
 
     citations = [
         {
             "source": chunk.chunk.source,
             "chunk_index": chunk.chunk.metadata["chunk_index"]
         }
-        for chunk in retrieval_result.chunks
+        for chunk in filtered_chunks
     ]
 
-    scores = [chunk.distance for chunk in retrieval_result.chunks]
+    scores = [chunk.distance for chunk in filtered_chunks]
     confidence = compute_confidence(scores)
     
     return {
