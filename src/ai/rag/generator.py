@@ -16,7 +16,7 @@ class Generator:
         self.client = OpenAI()
         self.model = model
 
-    def generate_answer(self, query: str, context: List[RetrievedDocumentChunk]) -> str:
+    def generate_answer(self, context: List[RetrievedDocumentChunk], sub_queries: List[str]) -> str:
         """
         Generate an answer strictly using the provided context.
 
@@ -26,7 +26,7 @@ class Generator:
         - Do not hallucinate or add external knowledge
         """
 
-        system_prompt, user_prompt = PromptCompiler.compile(query, context)
+        system_prompt, user_prompt = PromptCompiler.compile(context, sub_queries)
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -41,7 +41,8 @@ class Generator:
         output_tokens = response.usage.completion_tokens
         model_used = response.model
 
-        logger.info(f"Generated answer for query: \"{query}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
+        query_str = " | ".join(sub_queries)
+        logger.info(f"Generated answer for query: \"{query_str}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
 
         answer = response.choices[0].message.content.strip()
         
