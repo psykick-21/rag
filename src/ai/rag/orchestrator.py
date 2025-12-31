@@ -20,6 +20,7 @@ class RAGOrchestrator:
     - Call APIs directly from routes
     - Contain prompt logic
     - Contain retrieval logic
+    - Ingest data
     """
 
     def __init__(self):

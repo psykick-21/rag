@@ -39,7 +39,8 @@ rag/
 │   │   └── rag/
 │   │       ├── __init__.py
 │   │       ├── generator.py        # LLM response generation
-│   │       ├── models.py            # Data models and schemas
+│   │       ├── ingestor.py         # Document ingestion and indexing
+│   │       ├── models.py           # Data models and schemas
 │   │       ├── orchestrator.py     # RAG orchestration logic
 │   │       ├── prompt_compiler.py  # Prompt construction
 │   │       ├── query_analyzer.py   # Query analysis and processing
