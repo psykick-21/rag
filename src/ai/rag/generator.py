@@ -1,5 +1,6 @@
 from typing import List
 from openai import OpenAI
+from openai.types.chat.chat_completion import ChatCompletion
 from src.ai.rag.models import RetrievedDocumentChunk
 from src.ai.rag.prompt_compiler import PromptCompiler
 from src.utils.logger import getLogger
@@ -16,7 +17,7 @@ class Generator:
         self.client = OpenAI()
         self.model = model
 
-    def generate_answer(self, context: List[RetrievedDocumentChunk], sub_queries: List[str]) -> str:
+    def generate_response(self, context: List[RetrievedDocumentChunk], sub_queries: List[str]) -> ChatCompletion:
         """
         Generate an answer strictly using the provided context.
 
@@ -36,14 +37,5 @@ class Generator:
             ],
             temperature=0.0
         )
-
-        input_tokens = response.usage.prompt_tokens
-        output_tokens = response.usage.completion_tokens
-        model_used = response.model
-
-        query_str = " | ".join(sub_queries)
-        logger.info(f"Generated answer for query: \"{query_str}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
-
-        answer = response.choices[0].message.content.strip()
         
-        return answer
+        return response
