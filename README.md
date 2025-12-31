@@ -24,6 +24,15 @@ rag/
 ├── uv.lock                 # Lock file for dependency versions
 ├── README.md               # Project documentation
 │
+├── data/
+│   └── raw_docs/           # Source documentation files
+│       ├── airflow/        # Airflow documentation
+│       ├── awesome_genai/  # Awesome GenAI documentation
+│       ├── fastapi/        # FastAPI documentation
+│       ├── langchain/      # LangChain documentation
+│       ├── pgvector/       # pgvector documentation
+│       └── tanstack/       # TanStack documentation
+│
 ├── src/
 │   ├── ai/
 │   │   ├── __init__.py
@@ -33,6 +42,7 @@ rag/
 │   │       ├── models.py            # Data models and schemas
 │   │       ├── orchestrator.py     # RAG orchestration logic
 │   │       ├── prompt_compiler.py  # Prompt construction
+│   │       ├── query_analyzer.py   # Query analysis and processing
 │   │       └── retriever.py        # Document retrieval logic
 │   │
 │   ├── api/
@@ -48,19 +58,28 @@ rag/
 │   │   │   └── __init__.py         # Pydantic schemas
 │   │   │
 │   │   ├── utils/
-│   │   │   └── __init__.py         # Utility functions
+│   │   │   ├── __init__.py
+│   │   │   ├── confidence.py       # Confidence scoring utilities
+│   │   │   └── retriever_utils.py  # Retriever helper functions
 │   │   │
 │   │   └── middleware/
 │   │       ├── __init__.py
 │   │       ├── cors.py             # CORS configuration
 │   │       └── logging.py          # Request/response logging
 │   │
-│   └── db/
+│   ├── db/
+│   │   ├── __init__.py
+│   │   └── connection.py           # Database connection setup
+│   │
+│   └── utils/
 │       ├── __init__.py
-│       └── connection.py           # Database connection setup
+│       └── logger/
+│           ├── __init__.py
+│           └── logger.py          # Logging utilities
 │
 └── docs/
     ├── daily_logs.md               # Development logs
     ├── Explanations.md             # Technical documentation
+    ├── failure_modes.md            # Failure mode documentation
     └── ingestion_assumptions.md    # Document ingestion assumptions
 ```
