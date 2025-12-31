@@ -1,7 +1,6 @@
 from src.ai.rag.models import RetrievalResult
 from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding, RetrievedDocumentChunk
 from src.db.connection import conn
-from src.utils.logger import getLogger
 
 from typing import List
 from openai import OpenAI
@@ -12,7 +11,6 @@ from pathlib import Path
 from tqdm import tqdm
 
 load_dotenv()
-logger = getLogger(__name__)
 
 
 class Retriever:
@@ -49,9 +47,6 @@ class Retriever:
                 ),
                 distance=chunk[6]
             ) for chunk in fetched_chunks]
-
-        logger.info(f"Retrieved {len(chunks)} chunks for query: {query}")
-        logger.info("\n".join([f"Source: {chunk.chunk.source} - Chunk Index: {chunk.chunk.metadata['chunk_index']} - Distance: {chunk.distance}" for chunk in chunks]))
 
         return RetrievalResult(chunks=chunks)
 

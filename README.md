@@ -43,7 +43,11 @@ rag/
 │   │       ├── orchestrator.py     # RAG orchestration logic
 │   │       ├── prompt_compiler.py  # Prompt construction
 │   │       ├── query_analyzer.py   # Query analysis and processing
-│   │       └── retriever.py        # Document retrieval logic
+│   │       ├── retriever.py        # Document retrieval logic
+│   │       └── utils/
+│   │           ├── __init__.py
+│   │           ├── confidence.py       # Confidence scoring utilities
+│   │           └── retriever_utils.py  # Retriever helper functions
 │   │
 │   ├── api/
 │   │   ├── __init__.py
@@ -58,9 +62,7 @@ rag/
 │   │   │   └── __init__.py         # Pydantic schemas
 │   │   │
 │   │   ├── utils/
-│   │   │   ├── __init__.py
-│   │   │   ├── confidence.py       # Confidence scoring utilities
-│   │   │   └── retriever_utils.py  # Retriever helper functions
+│   │   │   └── __init__.py
 │   │   │
 │   │   └── middleware/
 │   │       ├── __init__.py
