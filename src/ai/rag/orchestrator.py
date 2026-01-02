@@ -30,6 +30,7 @@ class RAGOrchestrator:
     def run(
         self,
         query: str,
+        only_latest: bool = False
     ) -> str:
         
         sub_queries = generate_sub_queries(query)
@@ -37,7 +38,7 @@ class RAGOrchestrator:
         
         retrieval_results = []
         for sub_query in sub_queries:
-            retrieval_result = self.retriever.retrieve(sub_query)
+            retrieval_result = self.retriever.retrieve(sub_query, top_k=5, only_latest=only_latest)
             logger.info(f"Retrieved {len(retrieval_result.chunks)} chunks for sub-query: {sub_query}")
             retrieval_results.extend(retrieval_result.chunks)
 
