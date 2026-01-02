@@ -45,10 +45,14 @@ class RAGOrchestrator:
         deduplicated_retrieval_chunks = dedupe_retrieved_chunks(retrieval_results)
         logger.info(f"Deduplicated chunks from {len(retrieval_results)} to {len(deduplicated_retrieval_chunks)}")
 
-        filtered_chunks = filter_top_k_chunks(deduplicated_retrieval_chunks)
-        logger.info(f"Filtered chunks from {len(deduplicated_retrieval_chunks)} to {len(filtered_chunks)}")
+        # filtered_chunks = filter_top_k_chunks(deduplicated_retrieval_chunks)
+        # logger.info(f"Filtered chunks from {len(deduplicated_retrieval_chunks)} to {len(filtered_chunks)}")
+
+        # final_chunks = filtered_chunks.copy()
+        final_chunks = deduplicated_retrieval_chunks.copy()
+
         
-        response = self.generator.generate_response(filtered_chunks, sub_queries)
+        response = self.generator.generate_response(final_chunks, sub_queries)
         
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
@@ -57,16 +61,19 @@ class RAGOrchestrator:
         logger.info(f"Generated answer for query: \"{query_str}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
 
         answer = response.choices[0].message.content.strip()
+
+        print_str = "\n\n".join([str(final_chunk) for final_chunk in final_chunks])
+        logger.info(f"\n\n{print_str}\n\n")
         
         citations = [
             {
                 "source": chunk.chunk.source,
                 "chunk_index": chunk.chunk.metadata["chunk_index"]
             }
-            for chunk in filtered_chunks
+            for chunk in final_chunks
         ]
 
-        scores = [chunk.distance for chunk in filtered_chunks]
+        scores = [chunk.distance for chunk in final_chunks]
         confidence = compute_confidence(scores)
         
         return {
