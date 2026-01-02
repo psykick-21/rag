@@ -5,12 +5,16 @@ from src.ai.rag.models import RetrievedDocumentChunk
 def dedupe_retrieved_chunks(retrieved_chunks: List[RetrievedDocumentChunk]) -> List[RetrievedDocumentChunk]:
     """Deduplicates the retrieved chunks."""
 
-    seen = {}
+    seen = set()
     result = []
     for chunk in retrieved_chunks:
-        key = (chunk.chunk.source, chunk.chunk.metadata.get("chunk_index"))
+        # Get chunk_index safely, defaulting to None if metadata is missing or doesn't have chunk_index
+        chunk_index = None
+        if chunk.chunk.metadata:
+            chunk_index = chunk.chunk.metadata.get("chunk_index")
+        key = (chunk.chunk.source, chunk_index)
         if key not in seen:
-            seen[key] = chunk
+            seen.add(key)
             result.append(chunk)
     return result
 
