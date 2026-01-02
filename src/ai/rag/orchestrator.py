@@ -3,6 +3,7 @@ from src.ai.rag.generator import Generator
 from src.ai.rag.query_analyzer import generate_sub_queries
 from src.ai.rag.utils.retriever_utils import dedupe_retrieved_chunks, filter_top_k_chunks
 from src.ai.rag.utils.confidence import compute_confidence
+from src.ai.rag.utils.debug_utils import DebugUtils
 from src.utils.logger import getLogger
 
 logger = getLogger(__name__)
@@ -30,54 +31,74 @@ class RAGOrchestrator:
     def run(
         self,
         query: str,
-        only_latest: bool = False
+        only_latest: bool = False,
+        debug: bool = False
     ) -> str:
+
+        debug_payload = {
+            "query": query,
+            "only_latest": only_latest,
+            "sub_queries": []
+        }
         
+        # STEP 1: DECOMPOSE THE QUERY INTO SUB-QUERIES
         sub_queries = generate_sub_queries(query)
-        logger.info(f"Generated {len(sub_queries)} sub-queries for query: {query}")
+        logger.info(f"Sub-queries generated = {len(sub_queries)}")
         
+        # STEP 2: RETRIEVE THE CHUNKS FOR EACH SUB-QUERY
         retrieval_results = []
         for sub_query in sub_queries:
-            retrieval_result = self.retriever.retrieve(sub_query, top_k=5, only_latest=only_latest)
+            retrieval_result = self.retriever.retrieve(sub_query, only_latest=only_latest)
             logger.info(f"Retrieved {len(retrieval_result.chunks)} chunks for sub-query: {sub_query}")
             retrieval_results.extend(retrieval_result.chunks)
+            debug_payload["sub_queries"].append(DebugUtils.calc_debug_metrics_for_sub_query(sub_query, retrieval_result))
+        logger.info(f"Retrieved chunks = {len(retrieval_results)}")
 
+        debug_payload["retrieved_chunks"] = len(retrieval_results)
+
+        # STEP 3: DEDUPLICATE THE CHUNKS
         deduplicated_retrieval_chunks = dedupe_retrieved_chunks(retrieval_results)
-        logger.info(f"Deduplicated chunks from {len(retrieval_results)} to {len(deduplicated_retrieval_chunks)}")
-
-        # filtered_chunks = filter_top_k_chunks(deduplicated_retrieval_chunks)
-        # logger.info(f"Filtered chunks from {len(deduplicated_retrieval_chunks)} to {len(filtered_chunks)}")
-
-        # final_chunks = filtered_chunks.copy()
-        final_chunks = deduplicated_retrieval_chunks.copy()
-
+        logger.info(f"Deduplicated chunks = {len(deduplicated_retrieval_chunks)}")
         
-        response = self.generator.generate_response(final_chunks, sub_queries)
+        debug_payload["deduplicated_chunks"] = len(deduplicated_retrieval_chunks)
+        
+        # STEP 4: GENERATE THE ANSWER
+        response = self.generator.generate_response(deduplicated_retrieval_chunks, sub_queries)
+        answer = response.choices[0].message.content.strip()
         
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
         model_used = response.model
-        query_str = " | ".join(sub_queries)
-        logger.info(f"Generated answer for query: \"{query_str}\" using model: {model_used} with {input_tokens} input tokens and {output_tokens} output tokens")
+        logger.info(f"Generated answer for the query.\nModel = {model_used}. Input tokens = {input_tokens}. Output tokens = {output_tokens}")
 
-        answer = response.choices[0].message.content.strip()
+        debug_payload["input_tokens"] = input_tokens
+        debug_payload["output_tokens"] = output_tokens
+        debug_payload["model"] = model_used
 
-        print_str = "\n\n".join([str(final_chunk) for final_chunk in final_chunks])
-        logger.info(f"\n\n{print_str}\n\n")
-        
+        # STEP 5: COMPUTE THE CITATIONS
         citations = [
             {
                 "source": chunk.chunk.source,
                 "chunk_index": chunk.chunk.metadata["chunk_index"]
             }
-            for chunk in final_chunks
+            for chunk in deduplicated_retrieval_chunks
         ]
 
-        scores = [chunk.distance for chunk in final_chunks]
+        # STEP 6: COMPUTE THE CONFIDENCE
+        scores = [chunk.distance for chunk in deduplicated_retrieval_chunks]
         confidence = compute_confidence(scores)
         
-        return {
-            "answer": answer,
-            "citations": citations,
-            "confidence": confidence
-        }
+        # STEP 7: RETURN THE ANSWER, CITATIONS, AND CONFIDENCE
+        if debug:
+            return {
+                "answer": answer,
+                "citations": citations,
+                "confidence": confidence,
+                "debug": debug_payload
+            }
+        else:
+            return {
+                "answer": answer,
+                "citations": citations,
+                "confidence": confidence
+            }
