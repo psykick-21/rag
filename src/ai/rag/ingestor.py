@@ -1,9 +1,12 @@
+import uuid
+from datetime import datetime
 from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding
 from src.db.connection import conn
 from typing import List
 from openai import OpenAI
 from tqdm import tqdm
 from pathlib import Path
+from uuid import uuid4
 
 
 class DocumentIngestor:
@@ -26,8 +29,10 @@ class DocumentIngestor:
 
     def _chunk_document_text(
         self, document_text: str,
+        ingestion_id: uuid.UUID,
+        ingested_at: datetime,
         chunk_size: int = 500,
-        overlap: int = 50
+        overlap: int = 50,
     ) -> List[DocumentChunk]:
         """Chunks the document text into smaller chunks of the given size."""
 
@@ -40,7 +45,7 @@ class DocumentIngestor:
                 DocumentChunk(
                     content=chunk_text,
                     source="document",
-                    metadata={"chunk_index": idx}
+                    metadata={"chunk_index": idx, "ingestion_id": ingestion_id, "ingested_at": ingested_at}
                 )
             )
             idx += 1
@@ -85,23 +90,52 @@ class DocumentIngestor:
                 )
             conn.commit()
 
+    
+    def _update_ingestion_metadata(self, ingestion_id: uuid.UUID, ingested_at: datetime, chunks_processed: int):
+        """Updates the ingestion metadata."""
 
-    def ingest_file(self, file_path: Path):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO ingestion_metadata (ingestion_id, ingested_at, num_chunks) VALUES (%s, %s, %s)",
+                (ingestion_id, ingested_at, chunks_processed)
+            )
+            conn.commit()
+
+
+    def ingest_file(self, file_path: Path, ingestion_id = None, ingested_at = None, save_ingestion_metadata = True):
         """Ingests a file."""
+
+        if not ingestion_id:
+            ingestion_id = uuid4()
+        
+        if not ingested_at:
+            ingested_at = datetime.now()
 
         with open(file_path, "r", encoding="utf-8") as f:
             document_text = f.read()
-        chunks = self._chunk_document_text(document_text)
+        chunks = self._chunk_document_text(document_text, ingestion_id, ingested_at)
         embedded_chunks = self._embed_chunks(chunks)
         self._save_embeddings_to_db(embedded_chunks)
+
+        if save_ingestion_metadata:
+            self._update_ingestion_metadata(ingestion_id, ingested_at, len(chunks))
+
+        return ingestion_id, ingested_at, len(chunks)
 
 
     def ingest_directory(self, directory_path: Path):
         """Ingests a directory of documents."""
 
+        ingestion_id = uuid4()
+        ingested_at = datetime.now()
+        total_chunks = 0
+
         for file in tqdm(directory_path.glob("*.md"), desc=f"Processing {directory_path}", leave=False):
-            self.ingest_file(file)
-            
+            _, _, chunks_processed = self.ingest_file(file, ingestion_id, ingested_at, save_ingestion_metadata=False)
+            total_chunks += chunks_processed
+
+        self._update_ingestion_metadata(ingestion_id, ingested_at, total_chunks)
+        return ingestion_id, ingested_at, total_chunks
 
 
 if __name__ == "__main__":
