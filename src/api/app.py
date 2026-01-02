@@ -3,7 +3,7 @@
 import logging
 from fastapi import FastAPI
 
-from src.api.routers import health, chat
+from src.api.routers import health, chat, ingestions
 from src.api.middleware.cors import setup_cors
 from src.api.middleware.logging import LoggingMiddleware
 
@@ -27,6 +27,7 @@ app.add_middleware(LoggingMiddleware)
 # Include routers
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(ingestions.router)
 
 
 def run_app(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
