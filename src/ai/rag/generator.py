@@ -13,19 +13,12 @@ class Generator:
     in retrieved document context.
     """
 
-    def __init__(self, model: str = "gpt-4.1-nano"):
+    def __init__(self):
         self.client = OpenAI()
-        self.model = model
+        self.model = "gpt-4.1-nano"
 
     def generate_response(self, context: List[RetrievedDocumentChunk], sub_queries: List[str]) -> ChatCompletion:
-        """
-        Generate an answer strictly using the provided context.
-
-        Rules:
-        - Use ONLY the given context chunks
-        - If the answer is not present, say "I don't know"
-        - Do not hallucinate or add external knowledge
-        """
+        """Generates an answer strictly using the provided context."""
 
         system_prompt, user_prompt = PromptCompiler.compile(context, sub_queries)
 
