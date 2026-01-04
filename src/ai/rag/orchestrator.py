@@ -1,5 +1,6 @@
 from src.ai.rag.retriever import Retriever
 from src.ai.rag.generator import Generator
+from src.ai.rag.evaluator import ResponseEvaluator
 from src.ai.rag.query_analyzer import generate_sub_queries
 from src.ai.rag.utils.retriever_utils import dedupe_retrieved_chunks, filter_top_k_chunks
 from src.ai.rag.utils.confidence import compute_confidence
@@ -27,6 +28,7 @@ class RAGOrchestrator:
     def __init__(self):
         self.retriever = Retriever()
         self.generator = Generator()
+        self.evaluator = ResponseEvaluator()
 
     def run(
         self,
@@ -87,14 +89,19 @@ class RAGOrchestrator:
         # STEP 6: COMPUTE THE CONFIDENCE
         scores = [chunk.distance for chunk in deduplicated_retrieval_chunks]
         confidence = compute_confidence(scores)
+
+        # STEP 7: EVALUATE THE ANSWER
+        evaluation_response_model = self.evaluator.evaluate(query, deduplicated_retrieval_chunks, answer)
+        evaluation_result = evaluation_response_model.model_dump_json(indent=4)
         
-        # STEP 7: RETURN THE ANSWER, CITATIONS, AND CONFIDENCE
+        # STEP 8: RETURN THE ANSWER, CITATIONS, AND CONFIDENCE
         if debug:
             return {
                 "answer": answer,
                 "citations": citations,
                 "confidence": confidence,
-                "debug": debug_payload
+                "debug": debug_payload,
+                "evaluation": evaluation_result
             }
         else:
             return {

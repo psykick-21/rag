@@ -69,6 +69,7 @@ rag/
 │   │   ├── __init__.py
 │   │   └── rag/
 │   │       ├── __init__.py
+│   │       ├── evaluator.py        # Answer evaluation and quality assessment
 │   │       ├── generator.py        # LLM response generation
 │   │       ├── ingestor.py         # Document ingestion and indexing
 │   │       ├── models.py           # Data models and schemas
@@ -79,6 +80,7 @@ rag/
 │   │       └── utils/
 │   │           ├── __init__.py
 │   │           ├── confidence.py       # Confidence scoring utilities
+│   │           ├── debug_utils.py      # Debugging utilities
 │   │           └── retriever_utils.py  # Retriever helper functions
 │   │
 │   ├── api/
@@ -131,6 +133,8 @@ rag/
 
 - **`generator.py`** - Generates answers grounded in retrieved document context. Uses OpenAI's chat completion API with strict rules to only use provided context and avoid hallucination.
 
+- **`evaluator.py`** - Evaluates answer quality and relevance using structured output. Provides automated assessment of answer accuracy, completeness, and grounding in retrieved context.
+
 - **`query_analyzer.py`** - Analyzes user queries and splits complex questions into sub-queries. Handles multiple question marks, conjunctions like "and", and questions containing "how" or "why".
 
 - **`prompt_compiler.py`** - Constructs system and user prompts for the LLM. Formats retrieved context chunks and sub-queries into structured prompts for grounded answering.
@@ -142,3 +146,5 @@ rag/
 - **`retriever_utils.py`** - Helper functions for retrieval: deduplicates retrieved chunks and filters top-k chunks based on distance scores.
 
 - **`confidence.py`** - Computes confidence levels (low/medium/high) based on retrieval distance scores to assess answer reliability.
+
+- **`debug_utils.py`** - Debugging utilities for development and troubleshooting.
