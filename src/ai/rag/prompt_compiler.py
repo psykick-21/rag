@@ -1,6 +1,5 @@
 from typing import List, Tuple
-import json
-from src.ai.rag.models import RetrievedDocumentChunk, AnswerEvaluation
+from src.ai.rag.models import RetrievedDocumentChunk, QueryDecompositionResult
 
 class PromptCompiler:
     """
@@ -61,8 +60,6 @@ class PromptCompiler:
         Builds system and user prompts for evaluating the response.
         """
 
-        response_evaluator_output_schema_json_str = json.dumps(AnswerEvaluation.model_json_schema(), indent=4)
-
         system_prompt = (
             "You are an answer evaluation module for a retrieval-augmented generation (RAG) system.\n\n"
             "Your task is to evaluate the assistant’s answer strictly using the provided information.\n\n"
@@ -94,4 +91,31 @@ class PromptCompiler:
             f"## Answer: \n\n{answer}"
         )
    
+        return system_prompt, user_prompt
+
+    
+    @staticmethod
+    def compile_query_decomposition_prompt(
+        query: str
+    ) -> QueryDecompositionResult:
+        """
+        Builds system and user prompts for decomposing the query.
+        """
+
+        system_prompt = (
+            "You are a query decomposition engine.\n\n"
+            "Your task is to break a user question into the minimal set of independent, answerable sub-questions.\n\n"
+            "Rules:\n"
+            "- Do NOT answer the question.\n"
+            "- Do NOT add facts, assumptions, or explanations.\n"
+            "- Each sub-question must be self-contained.\n"
+            "- Use ONLY information present in the original question.\n"
+            "- If the question cannot be decomposed, return a single sub-question identical to the original.\n"
+            "- Do NOT invent intermediate entities unless explicitly required by the question.\n"
+        )
+
+        user_prompt = (
+            f"## Query: \n\n{query}\n\n"
+        )
+
         return system_prompt, user_prompt
