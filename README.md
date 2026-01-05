@@ -38,13 +38,45 @@ Start the API server:
 python -m src.api.app
 ```
 
+Or run directly with uvicorn:
+```bash
+uvicorn src.api.app:app --reload
+```
+
 The API will be available at `http://localhost:8000`
+
+**Note:** The API includes CORS middleware and request/response logging middleware for development and debugging.
 
 ## API Endpoints
 
-- `GET /api/v1/chat?query=your_question&only_latest=false` - Ask a question
-- `GET /api/v1/ingestions` - View ingestion history
-- `GET /health` - Health check
+### Chat Endpoint
+`GET /api/v1/chat` - Ask a question and get an answer with citations
+
+**Query Parameters:**
+- `query` (required) - The user query string
+- `only_latest` (optional, default: `false`) - Whether to return only the latest results
+- `debug` (optional, default: `false`) - Whether to return debug information including sub-queries, retrieval metrics, token usage, and evaluation results
+- `use_llm_decomposition` (optional, default: `false`) - Whether to use LLM-based query decomposition instead of manual rule-based decomposition
+
+**Response Format:**
+```json
+{
+  "answer": "The generated answer...",
+  "citations": [
+    {
+      "source": "path/to/document.md",
+      "chunk_index": 0
+    }
+  ],
+  "confidence": "medium",
+  "debug": { ... },  // Only included if debug=true
+  "evaluation": "..."  // Only included if debug=true
+}
+```
+
+### Other Endpoints
+- `GET /api/v1/ingestions` - View ingestion history (returns ingestion_id, timestamp, and number_of_chunks)
+- `GET /health` - Health check endpoint
 
 ## Project Structure
 
@@ -133,9 +165,11 @@ rag/
 
 - **`generator.py`** - Generates answers grounded in retrieved document context. Uses OpenAI's chat completion API with strict rules to only use provided context and avoid hallucination.
 
-- **`evaluator.py`** - Evaluates answer quality and relevance using structured output. Provides automated assessment of answer accuracy, completeness, and grounding in retrieved context.
+- **`evaluator.py`** - Evaluates answer quality and relevance using structured output. Provides automated assessment of answer accuracy, completeness, and grounding in retrieved context. Returns evaluation results including grounded status, sufficient context check, missing aspects, and confidence alignment.
 
-- **`query_analyzer.py`** - Analyzes user queries and splits complex questions into sub-queries. Handles multiple question marks, conjunctions like "and", and questions containing "how" or "why".
+- **`query_analyzer.py`** - Analyzes user queries and splits complex questions into sub-queries. Supports two modes:
+  - **Manual decomposition**: Rule-based splitting for multiple question marks, conjunctions like "and", and questions containing "how" or "why"
+  - **LLM-based decomposition**: Uses GPT-4.1-nano to intelligently decompose complex queries into sub-queries
 
 - **`prompt_compiler.py`** - Constructs system and user prompts for the LLM. Formats retrieved context chunks and sub-queries into structured prompts for grounded answering.
 

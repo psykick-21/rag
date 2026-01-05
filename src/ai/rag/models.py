@@ -25,6 +25,24 @@ class DocumentChunkEmbedding:
     embedding: List[float]
 
 
+class QueryDecompositionResult(BaseModel):
+    """
+    Structured result of query decomposition.
+    """
+
+    original_query: str = Field(
+        ...,
+        description="The original query that was decomposed."
+    )
+    sub_queries: List[str] = Field(
+        ...,
+        description="The sub-queries that were generated from the original query."
+    )
+    reasoning: str = Field(
+        ...,
+        description="The reasoning behind the decomposition."
+    )
+
 
 class AnswerEvaluation(BaseModel):
     """

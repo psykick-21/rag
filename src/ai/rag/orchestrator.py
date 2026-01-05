@@ -1,8 +1,8 @@
 from src.ai.rag.retriever import Retriever
 from src.ai.rag.generator import Generator
 from src.ai.rag.evaluator import ResponseEvaluator
-from src.ai.rag.query_analyzer import generate_sub_queries
-from src.ai.rag.utils.retriever_utils import dedupe_retrieved_chunks, filter_top_k_chunks
+from src.ai.rag.query_analyzer import QueryAnalyzer
+from src.ai.rag.utils.retriever_utils import dedupe_retrieved_chunks
 from src.ai.rag.utils.confidence import compute_confidence
 from src.ai.rag.utils.debug_utils import DebugUtils
 from src.utils.logger import getLogger
@@ -29,10 +29,12 @@ class RAGOrchestrator:
         self.retriever = Retriever()
         self.generator = Generator()
         self.evaluator = ResponseEvaluator()
+        self.query_analyzer = QueryAnalyzer()
 
     def run(
         self,
         query: str,
+        use_llm_decomposition: bool = False,
         only_latest: bool = False,
         debug: bool = False
     ) -> str:
@@ -44,7 +46,13 @@ class RAGOrchestrator:
         }
         
         # STEP 1: DECOMPOSE THE QUERY INTO SUB-QUERIES
-        sub_queries = generate_sub_queries(query)
+        if use_llm_decomposition:
+            query_decomposition_result = self.query_analyzer.decompose_query_llm(query)
+            sub_queries = query_decomposition_result.sub_queries
+            logger.info(f"Used LLM based query decomposition.")
+        else:
+            sub_queries = self.query_analyzer.decompose_query_manual(query)
+            logger.info(f"Used manual query decomposition.")
         logger.info(f"Sub-queries generated = {len(sub_queries)}")
         
         # STEP 2: RETRIEVE THE CHUNKS FOR EACH SUB-QUERY

@@ -14,13 +14,19 @@ router = APIRouter(prefix="/api/v1", tags=["chat"])
 async def chat(
     query: str = Query(..., description="The user query string"),
     only_latest: bool = Query(False, description="Whether to return only the latest results"),
-    debug: bool = Query(False, description="Whether to return debug information")
+    debug: bool = Query(False, description="Whether to return debug information"),
+    use_llm_decomposition: bool = Query(False, description="Whether to use LLM based query decomposition"),
 ):
     """Chat endpoint accepting a query string."""
     
     orchestrator = RAGOrchestrator()
     try:
-        result = orchestrator.run(query, only_latest, debug)
+        result = orchestrator.run(
+            query=query,
+            use_llm_decomposition=use_llm_decomposition,
+            only_latest=only_latest,
+            debug=debug
+        )
         return result
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")

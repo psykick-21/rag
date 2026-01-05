@@ -1,66 +1,103 @@
 import re
 from typing import List
+from openai import OpenAI
+from dotenv import load_dotenv
+from src.ai.rag.models import QueryDecompositionResult
+from src.ai.rag.prompt_compiler import PromptCompiler
 
-def generate_sub_queries(query: str) -> List[str]:
-    """Generates sub-queries based on the main query.
-    
-    Splits queries that contain:
-    - Multiple question marks (?)
-    - Conjunctions like "and", "how", "why"
-    
-    Args:
-        query: The input query string
-        
-    Returns:
-        List of sub-queries
-        
-    Example:
-        "What is X and why use it?" -> ["What is X?", "Why use it?"]
+load_dotenv()
+
+class QueryAnalyzer:
     """
-    if not query or not query.strip():
-        return [query] if query else []
-    
-    query = query.strip()
-    
-    # Check for multiple question marks
-    question_count = query.count('?')
-    if question_count > 1:
-        # Split by question marks and filter out empty strings
-        sub_queries = [q.strip() + '?' for q in query.split('?') if q.strip()]
-        return sub_queries
-    
-    # Check for conjunctions that indicate multiple questions
-    # Split on all "and" conjunctions (case-insensitive)
-    parts = re.split(r'\s+and\s+', query, flags=re.IGNORECASE)
-    
-    if len(parts) > 1:
-        sub_queries = []
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            
-            # Capitalize first letter if it's not already capitalized
-            if part and not part[0].isupper():
-                part = part[0].upper() + part[1:]
-            
-            # Ensure it ends with ?
-            if not part.endswith('?'):
-                part += '?'
-            
-            sub_queries.append(part)
+    Responsible for analyzing the query and generating sub-queries.
+    """
+
+    def __init__(self):
+        self.client = OpenAI()
+        self.model = "gpt-4.1-nano"
+
+
+    def decompose_query_llm(
+        self,
+        query: str
+    ) -> QueryDecompositionResult:
+        """Decomposes the query into sub-queries."""
+
+        system_prompt, user_prompt = PromptCompiler.compile_query_decomposition_prompt(query)
+
+        response = self.client.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=QueryDecompositionResult,
+            temperature=0.0
+        )
+
+        return response.choices[0].message.parsed
+
+
+    def decompose_query_manual(self, query: str) -> List[str]:
+        """Generates sub-queries based on the main query.
         
-        if len(sub_queries) > 1:
+        Splits queries that contain:
+        - Multiple question marks (?)
+        - Conjunctions like "and", "how", "why"
+        
+        Args:
+            query: The input query string
+            
+        Returns:
+            List of sub-queries
+            
+        Example:
+            "What is X and why use it?" -> ["What is X?", "Why use it?"]
+        """
+        if not query or not query.strip():
+            return [query] if query else []
+        
+        query = query.strip()
+        
+        # Check for multiple question marks
+        question_count = query.count('?')
+        if question_count > 1:
+            # Split by question marks and filter out empty strings
+            sub_queries = [q.strip() + '?' for q in query.split('?') if q.strip()]
             return sub_queries
-    
-    # Check for "how" or "why" in the middle (not at start)
-    # This handles cases like "What is X? How does it work?"
-    if re.search(r'\?.*\b(how|why)\s+', query, re.IGNORECASE):
-        # Already handled by multiple ? check above
-        pass
-    
-    # No splitting needed, return original query
-    return [query]
+        
+        # Check for conjunctions that indicate multiple questions
+        # Split on all "and" conjunctions (case-insensitive)
+        parts = re.split(r'\s+and\s+', query, flags=re.IGNORECASE)
+        
+        if len(parts) > 1:
+            sub_queries = []
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                
+                # Capitalize first letter if it's not already capitalized
+                if part and not part[0].isupper():
+                    part = part[0].upper() + part[1:]
+                
+                # Ensure it ends with ?
+                if not part.endswith('?'):
+                    part += '?'
+                
+                sub_queries.append(part)
+            
+            if len(sub_queries) > 1:
+                return sub_queries
+        
+        # Check for "how" or "why" in the middle (not at start)
+        # This handles cases like "What is X? How does it work?"
+        if re.search(r'\?.*\b(how|why)\s+', query, re.IGNORECASE):
+            # Already handled by multiple ? check above
+            pass
+        
+        # No splitting needed, return original query
+        return [query]
 
 
 if __name__ == "__main__":
@@ -82,8 +119,9 @@ if __name__ == "__main__":
         "What is a vector database?",
     ]
 
+    query_analyzer = QueryAnalyzer()
+
     for query in queries:
-        sub_queries = generate_sub_queries(query)
-        print(f"Query: {query}")
-        print(f"Sub-queries: {sub_queries}")
+        query_decomposition_result = query_analyzer.decompose_query(query=query)
+        print((query_decomposition_result.model_dump_json(indent=4)))
         print("-" * 100)
