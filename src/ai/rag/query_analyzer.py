@@ -1,5 +1,42 @@
 import re
 from typing import List
+from openai import OpenAI
+from dotenv import load_dotenv
+from src.ai.rag.models import QueryDecompositionResult
+from src.ai.rag.prompt_compiler import PromptCompiler
+
+load_dotenv()
+
+class QueryAnalyzer:
+    """
+    Responsible for analyzing the query and generating sub-queries.
+    """
+
+    def __init__(self):
+        self.client = OpenAI()
+        self.model = "gpt-4.1-nano"
+
+
+    def decompose_query(
+        self,
+        query: str
+    ) -> QueryDecompositionResult:
+        """Decomposes the query into sub-queries."""
+
+        system_prompt, user_prompt = PromptCompiler.compile_query_decomposition_prompt(query)
+
+        response = self.client.chat.completions.parse(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format=QueryDecompositionResult,
+            temperature=0.0
+        )
+
+        return response.choices[0].message.parsed
+
 
 def generate_sub_queries(query: str) -> List[str]:
     """Generates sub-queries based on the main query.
@@ -82,8 +119,9 @@ if __name__ == "__main__":
         "What is a vector database?",
     ]
 
+    query_analyzer = QueryAnalyzer()
+
     for query in queries:
-        sub_queries = generate_sub_queries(query)
-        print(f"Query: {query}")
-        print(f"Sub-queries: {sub_queries}")
+        query_decomposition_result = query_analyzer.decompose_query(query=query)
+        print((query_decomposition_result.model_dump_json(indent=4)))
         print("-" * 100)
