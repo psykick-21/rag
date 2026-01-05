@@ -44,8 +44,95 @@ class DocumentIngestor:
         self.client = OpenAI()
 
 
+    def _is_line_separator(self, line: str) -> bool:
+        """Check if a line is a horizontal rule separator (---, ***, ___)."""
+        stripped = line.strip()
+        if not stripped:
+            return False
+        # Check if line consists of at least 3 of the same character: -, *, or _
+        if len(stripped) >= 3:
+            first_char = stripped[0]
+            if first_char in ['-', '*', '_']:
+                return all(c == first_char for c in stripped)
+        return False
+
+    def _is_boundary(self, line: str) -> bool:
+        """Check if a line is a boundary (h1, h2, or line separator)."""
+        stripped = line.strip()
+        return (
+            stripped.startswith("# ") or 
+            stripped.startswith("## ") or 
+            self._is_line_separator(line)
+        )
+
+    def _divide_document_text_into_parent_sections(
+        self,
+        document_text: str
+    ) -> List[str]:
+        """
+        Divides markdown text into parent sections based on boundaries:
+        - Boundaries are: level 1 headings (#), level 2 headings (##), and line separators (---, ***, ___)
+        - Everything between boundaries becomes a parent section
+        - Content before the first boundary also becomes a parent section
+        - Headings are included in their sections; line separators are skipped
+        """
+
+        lines = document_text.splitlines()
+        section_chunks = []
+        current_section = []
+
+        def finish_section():
+            """Finish and save the current section."""
+            nonlocal current_section
+            if current_section:
+                section_chunks.append('\n'.join(current_section).strip())
+                current_section = []
+
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
+            
+            # Check if this line is a boundary
+            if self._is_boundary(line):
+                # Finish the current section (if any)
+                finish_section()
+                
+                # If it's a heading, start a new section with the heading
+                stripped = line.strip()
+                if stripped.startswith("# ") or stripped.startswith("## "):
+                    current_section = [line]
+                    idx += 1
+                    
+                    # Collect content until we hit another boundary
+                    # Include all sub-headings (###, ####, etc.) in the current section
+                    while idx < len(lines):
+                        next_line = lines[idx]
+                        # Stop at next boundary (h1, h2, or line separator)
+                        if self._is_boundary(next_line):
+                            break
+                        current_section.append(next_line)
+                        idx += 1
+                    
+                    finish_section()
+                    continue
+                else:
+                    # It's a line separator - skip it and start a new section
+                    idx += 1
+                    continue
+            
+            # Not a boundary - add to current section
+            current_section.append(line)
+            idx += 1
+        
+        # Finish any remaining section
+        finish_section()
+
+        return [chunk for chunk in section_chunks if chunk]
+
+
     def _chunk_document_text(
-        self, document_text: str,
+        self, 
+        document_text: str,
         file_name: str,
         ingestion_id: uuid.UUID,
         ingested_at: datetime,
@@ -159,6 +246,15 @@ class DocumentIngestor:
 
 
 if __name__ == "__main__":
-    path = Path("data/raw_docs/baml")
+    # path = Path("data/raw_docs/baml")
+    # ingestor = DocumentIngestor()
+    # ingestor.ingest_directory(path)
+
+    with open("data/raw_docs/langchain/README.md", "r", encoding="utf-8") as f:
+        document_text = f.read()
     ingestor = DocumentIngestor()
-    ingestor.ingest_directory(path)
+    parent_sections = ingestor._divide_document_text_into_parent_sections(document_text)
+    for i, section in enumerate(parent_sections):
+        print(f"Parent section {i+1}:")
+        print(section)
+        print("-" * 100)
