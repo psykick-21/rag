@@ -2,6 +2,31 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
+# chunk_id
+# chunk_type: "parent" | "child"
+# parent_id: nullable (null for parents)
+# source
+# ingestion_id
+# embedding
+# content
+
+@dataclass
+class ParentDocumentChunk:
+    content: str
+    source: str
+    chunk_type: str = "parent"
+    parent_chunk_id: Optional[int] = None
+    chunk_id: int
+    ingestion_id: str
+
+@dataclass
+class ChildDocumentChunk:
+    content: str
+    source: str
+    chunk_type: str = "child"
+    parent_chunk_id: int
+    chunk_id: int
+    ingestion_id: str
 
 @dataclass
 class DocumentChunk:
