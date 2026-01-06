@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding
+from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding, ParentDocumentChunk
 from src.db.connection import conn
 from typing import List, Any, Dict
 from openai import OpenAI
@@ -67,8 +67,9 @@ class DocumentIngestor:
 
     def _divide_document_text_into_parent_sections(
         self,
-        document_text: str
-    ) -> List[str]:
+        document_text: str,
+        ingestion_id: uuid.UUID,
+    ) -> List[ParentDocumentChunk]:
         """
         Divides markdown text into parent sections based on boundaries:
         - Boundaries are: level 1 headings (#), level 2 headings (##), and line separators (---, ***, ___)
@@ -127,7 +128,12 @@ class DocumentIngestor:
         # Finish any remaining section
         finish_section()
 
-        return [chunk for chunk in section_chunks if chunk]
+        return [ParentDocumentChunk(
+            content=chunk,
+            source=document_text,
+            chunk_id=i,
+            ingestion_id=ingestion_id,
+        ) for i, chunk in enumerate(section_chunks) if chunk]
 
 
     def _chunk_document_text(
