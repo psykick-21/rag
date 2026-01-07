@@ -1,29 +1,22 @@
+from src.ai.rag.models import (
+    DocumentChunk,
+    DocumentChunkEmbedding,
+    ParentDocumentChunk,
+    ChildDocumentChunk,
+)
+from src.db.connection import conn
+from src.ai.rag.utils.ingestor_utils import make_json_serializable
+
 import uuid
 from datetime import datetime
-from src.ai.rag.models import DocumentChunk, DocumentChunkEmbedding, ParentDocumentChunk
-from src.db.connection import conn
-from typing import List, Any, Dict
+from typing import List, Tuple, Optional
 from openai import OpenAI
 from tqdm import tqdm
 from pathlib import Path
 from uuid import uuid4
 from dotenv import load_dotenv
-import json
 
 load_dotenv()
-
-
-def _make_json_serializable(obj: Any) -> Any:
-    """Converts UUID and datetime objects to JSON-serializable types."""
-    if isinstance(obj, uuid.UUID):
-        return str(obj)
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    elif isinstance(obj, dict):
-        return {key: _make_json_serializable(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [_make_json_serializable(item) for item in obj]
-    return obj
 
 
 class DocumentIngestor:
@@ -44,31 +37,174 @@ class DocumentIngestor:
         self.client = OpenAI()
 
 
-    def _is_line_separator(self, line: str) -> bool:
-        """Check if a line is a horizontal rule separator (---, ***, ___)."""
-        stripped = line.strip()
-        if not stripped:
-            return False
-        # Check if line consists of at least 3 of the same character: -, *, or _
-        if len(stripped) >= 3:
-            first_char = stripped[0]
-            if first_char in ['-', '*', '_']:
-                return all(c == first_char for c in stripped)
-        return False
+    def ingest_file(
+        self,
+        file_path: Path,
+        ingestion_id: Optional[uuid.UUID] = None,
+        ingested_at: Optional[datetime] = None,
+        save_ingestion_metadata: bool = True,
+    ) -> Tuple[uuid.UUID, datetime, int]:
+        """
+        Ingests a single file by reading its contents, chunking the document,
+        embedding all resulting chunks, and saving the embeddings to the database.
 
-    def _is_boundary(self, line: str) -> bool:
-        """Check if a line is a boundary (h1, h2, or line separator)."""
-        stripped = line.strip()
-        return (
-            stripped.startswith("# ") or 
-            stripped.startswith("## ") or 
-            self._is_line_separator(line)
-        )
+        Optionally updates ingestion metadata if requested.
+
+        Args:
+            file_path (Path): The path to the file to ingest.
+            ingestion_id (Optional[uuid.UUID]): The unique ID for this ingestion. Generated externally if not provided.
+            ingested_at (Optional[datetime]): The timestamp for this ingestion. Set externally if not provided.
+            save_ingestion_metadata (bool): Whether to update/save ingestion metadata after processing this file.
+
+        Returns:
+            Tuple[uuid.UUID, datetime, int]: The ingestion_id, ingested_at timestamp, and the number of chunks processed.
+        """
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            document_text = f.read()
+        document_chunks = self.chunk_document_text(document_text, str(file_path), ingestion_id, ingested_at)
+        embedded_chunks = self.embed_chunks(document_chunks)
+        self.save_embeddings_to_db(embedded_chunks)
+    
+        if save_ingestion_metadata:
+            self.update_ingestion_metadata(ingestion_id, ingested_at, len(document_chunks))
+
+        return ingestion_id, ingested_at, len(document_chunks)
+
+
+    def ingest_directory(
+        self,
+        directory_path: Path
+    ) -> Tuple[uuid.UUID, datetime, int]:
+        """
+        Ingests all Markdown (.md) files in a specified directory.
+
+        This method iterates through all .md files in the given directory,
+        ingests each file (chunking, embedding, and saving embeddings to the database),
+        and aggregates the total number of processed chunks. A single ingestion ID 
+        and timestamp is used for the entire batch, and ingestion metadata is updated
+        once after all files are processed.
+
+        Args:
+            directory_path (Path): The path to the directory containing documents to ingest.
+
+        Returns:
+            Tuple[uuid.UUID, datetime, int]: The ingestion_id, ingested_at timestamp, 
+                and the total number of chunks processed across all files.
+        """
+        ingestion_id = uuid4()
+        ingested_at = datetime.now()
+        total_chunks = 0
+
+        for file in tqdm(directory_path.glob("*.md"), desc=f"Processing {directory_path}", leave=False):
+            _, _, chunks_processed = self.ingest_file(file, ingestion_id, ingested_at, save_ingestion_metadata=False)
+            total_chunks += chunks_processed
+
+        self.update_ingestion_metadata(ingestion_id, ingested_at, total_chunks)
+        return ingestion_id, ingested_at, total_chunks
+
+
+    def chunk_document_text(
+        self,
+        document_text: str,
+        source: str,
+        ingestion_id: uuid.UUID,
+        ingested_at: datetime,
+    ) -> List[DocumentChunk]:
+        """Chunks the document text into parent sections."""
+
+        parent_chunks = self._divide_document_text_into_parent_sections(document_text, source)
+
+        all_child_chunks = []
+        for parent_chunk in parent_chunks:
+            child_chunks = self._chunk_parent_sections(
+                document_text=parent_chunk.content,
+                source=source,
+                parent_chunk_id=parent_chunk.chunk_id,
+                chunk_size=500,
+                overlap=50,
+            )
+            all_child_chunks.extend(child_chunks)
+
+        child_document_chunks = self._convert_child_chunks_to_document_chunks(all_child_chunks, ingestion_id, ingested_at)
+        parent_document_chunks = self._convert_parent_chunks_to_document_chunks(parent_chunks, ingestion_id, ingested_at)
+
+        return child_document_chunks + parent_document_chunks
+
+
+    def embed_chunks(
+        self,
+        chunks: List[DocumentChunk]
+    ) -> List[DocumentChunkEmbedding]:
+        """Embeds the chunks using the OpenAI API."""
+
+        client = OpenAI()
+
+        embeded_chunks = []
+
+        for chunk in tqdm(chunks, desc="Embedding chunks", leave=False):
+            embedding = client.embeddings.create(
+                input=chunk.content,
+                model="text-embedding-3-small"
+            )
+            embeded_chunk = DocumentChunkEmbedding(
+                document_chunk=chunk,
+                embedding=embedding.data[0].embedding
+            )
+            embeded_chunks.append(embeded_chunk)
+        
+        return embeded_chunks
+
+
+    def _convert_child_chunks_to_document_chunks(
+        self,
+        child_chunks: List[ChildDocumentChunk],
+        ingestion_id: uuid.UUID,
+        ingested_at: datetime,
+    ) -> List[DocumentChunk]:
+        """Converts child chunks to document chunks."""
+
+        document_chunks = []
+
+        for child_chunk in child_chunks:
+            document_chunks.append(DocumentChunk(
+                content=child_chunk.content,
+                source=child_chunk.source,
+                chunk_type="child",
+                chunk_id=f"p{child_chunk.parent_chunk_id}-c{child_chunk.chunk_id}",
+                parent_chunk_id=f"p{child_chunk.parent_chunk_id}",
+                ingestion_id=ingestion_id,
+                ingested_at=ingested_at,
+            ))
+        return document_chunks
+    
+
+    def _convert_parent_chunks_to_document_chunks(
+        self,
+        parent_chunks: List[ParentDocumentChunk],
+        ingestion_id: uuid.UUID,
+        ingested_at: datetime,
+    ) -> List[DocumentChunk]:
+        """Converts parent chunks to document chunks."""
+
+        document_chunks = []
+        for parent_chunk in parent_chunks:
+            document_chunks.append(DocumentChunk(
+                content=parent_chunk.content,
+                source=parent_chunk.source,
+                chunk_type="parent",
+                chunk_id=f"p{parent_chunk.chunk_id}",
+                parent_chunk_id=None,
+                ingestion_id=ingestion_id,
+                ingested_at=ingested_at,
+            ))
+        return document_chunks
+
 
     def _divide_document_text_into_parent_sections(
         self,
         document_text: str,
-        ingestion_id: uuid.UUID,
+        source: str,
     ) -> List[ParentDocumentChunk]:
         """
         Divides markdown text into parent sections based on boundaries:
@@ -130,81 +266,106 @@ class DocumentIngestor:
 
         return [ParentDocumentChunk(
             content=chunk,
-            source=document_text,
+            source=source,
             chunk_id=i,
-            ingestion_id=ingestion_id,
         ) for i, chunk in enumerate(section_chunks) if chunk]
 
 
-    def _chunk_document_text(
+    def _chunk_parent_sections(
         self, 
         document_text: str,
-        file_name: str,
-        ingestion_id: uuid.UUID,
-        ingested_at: datetime,
+        source: str,
+        parent_chunk_id: int,
         chunk_size: int = 500,
         overlap: int = 50,
-    ) -> List[DocumentChunk]:
+    ) -> List[ChildDocumentChunk]:
         """Chunks the document text into smaller chunks of the given size."""
 
-        chunks = []
+        child_chunks = []
         idx = 0
 
         for i in range(0, len(document_text), chunk_size - overlap):
             chunk_text = document_text[i:i + chunk_size]
-            chunks.append(
-                DocumentChunk(
+            child_chunks.append(
+                ChildDocumentChunk(
                     content=chunk_text,
-                    source=file_name,
-                    metadata={"chunk_index": idx, "ingestion_id": ingestion_id, "ingested_at": ingested_at}
+                    source=source,
+                    parent_chunk_id=parent_chunk_id,
+                    chunk_id=idx,
                 )
             )
             idx += 1
-        return chunks
+        return child_chunks
+
+
+    def _is_line_separator(self, line: str) -> bool:
+        """Check if a line is a horizontal rule separator (---, ***, ___)."""
+        stripped = line.strip()
+        if not stripped:
+            return False
+        # Check if line consists of at least 3 of the same character: -, *, or _
+        if len(stripped) >= 3:
+            first_char = stripped[0]
+            if first_char in ['-', '*', '_']:
+                return all(c == first_char for c in stripped)
+        return False
+
+
+    def _is_boundary(self, line: str) -> bool:
+        """Check if a line is a boundary (h1, h2, or line separator)."""
+        stripped = line.strip()
+        return (
+            stripped.startswith("# ") or 
+            stripped.startswith("## ") or 
+            self._is_line_separator(line)
+        )
 
     
-    def _embed_chunks(
-        self,
-        chunks: List[DocumentChunk]
-    ) -> List[DocumentChunkEmbedding]:
-        """Embeds the chunks using the OpenAI API."""
-
-        client = OpenAI()
-
-        embeded_chunks = []
-
-        for chunk in tqdm(chunks, desc="Embedding chunks", leave=False):
-            embedding = client.embeddings.create(
-                input=chunk.content,
-                model="text-embedding-3-small"
-            )
-            embeded_chunk = DocumentChunkEmbedding(
-                document_chunk=chunk,
-                embedding=embedding.data[0].embedding
-            )
-            embeded_chunks.append(embeded_chunk)
-        
-        return embeded_chunks
-
-    
-    def _save_embeddings_to_db(
+    def save_embeddings_to_db(
         self,
         embeddings: List[DocumentChunkEmbedding]
     ):
-        """Saves the embeddings to the database."""
+        """Saves the embeddings to the database using the new table schema."""
 
         with conn.cursor() as cursor:
             for embedding in tqdm(embeddings, desc="Saving embeddings to database", leave=False):
-                # Convert metadata to JSON-serializable format
-                serializable_metadata = _make_json_serializable(embedding.document_chunk.metadata)
+                doc_chunk = embedding.document_chunk
+                serializable_metadata = make_json_serializable(doc_chunk.metadata)
                 cursor.execute(
-                    "INSERT INTO file_chunks (file_name, chunk_index, content, embedding, metadata) VALUES (%s, %s, %s, %s, %s)",
-                    (embedding.document_chunk.source, embedding.document_chunk.metadata["chunk_index"], embedding.document_chunk.content, embedding.embedding, json.dumps(serializable_metadata))
+                    """
+                    INSERT INTO file_chunks (
+                        content,
+                        source,
+                        chunk_id,
+                        chunk_type,
+                        parent_chunk_id,
+                        intestion_id,
+                        ingested_at,
+                        embedding,
+                        metadata
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        doc_chunk.content,
+                        doc_chunk.source,
+                        doc_chunk.chunk_id,
+                        doc_chunk.chunk_type,
+                        doc_chunk.parent_chunk_id,
+                        doc_chunk.ingestion_id,
+                        doc_chunk.ingested_at,
+                        embedding.embedding,
+                        serializable_metadata
+                    )
                 )
             conn.commit()
 
     
-    def _update_ingestion_metadata(self, ingestion_id: uuid.UUID, ingested_at: datetime, chunks_processed: int):
+    def update_ingestion_metadata(
+        self,
+        ingestion_id: uuid.UUID,
+        ingested_at: datetime,
+        chunks_processed: int,
+    ):
         """Updates the ingestion metadata."""
 
         with conn.cursor() as cursor:
@@ -215,52 +376,11 @@ class DocumentIngestor:
             conn.commit()
 
 
-    def ingest_file(self, file_path: Path, ingestion_id = None, ingested_at = None, save_ingestion_metadata = True):
-        """Ingests a file."""
-
-        if not ingestion_id:
-            ingestion_id = uuid4()
-        
-        if not ingested_at:
-            ingested_at = datetime.now()
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            document_text = f.read()
-        chunks = self._chunk_document_text(document_text, str(file_path), ingestion_id, ingested_at)
-        embedded_chunks = self._embed_chunks(chunks)
-        self._save_embeddings_to_db(embedded_chunks)
-
-        if save_ingestion_metadata:
-            self._update_ingestion_metadata(ingestion_id, ingested_at, len(chunks))
-
-        return ingestion_id, ingested_at, len(chunks)
-
-
-    def ingest_directory(self, directory_path: Path):
-        """Ingests a directory of documents."""
-
-        ingestion_id = uuid4()
-        ingested_at = datetime.now()
-        total_chunks = 0
-
-        for file in tqdm(directory_path.glob("*.md"), desc=f"Processing {directory_path}", leave=False):
-            _, _, chunks_processed = self.ingest_file(file, ingestion_id, ingested_at, save_ingestion_metadata=False)
-            total_chunks += chunks_processed
-
-        self._update_ingestion_metadata(ingestion_id, ingested_at, total_chunks)
-        return ingestion_id, ingested_at, total_chunks
-
-
 if __name__ == "__main__":
-    # path = Path("data/raw_docs/baml")
-    # ingestor = DocumentIngestor()
-    # ingestor.ingest_directory(path)
 
-    with open("data/raw_docs/langchain/README.md", "r", encoding="utf-8") as f:
-        document_text = f.read()
     ingestor = DocumentIngestor()
-    parent_sections = ingestor._divide_document_text_into_parent_sections(document_text)
-    for i, section in enumerate(parent_sections):
-        print(f"Parent section {i+1}:")
-        print(section)
-        print("-" * 100)
+    raw_docs_root = Path("data/raw_docs")
+
+    for folder in tqdm(raw_docs_root.iterdir(), desc="Ingesting folders", leave=False):
+        if folder.is_dir():
+            ingestor.ingest_directory(folder)
