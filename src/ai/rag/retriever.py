@@ -20,7 +20,13 @@ class Retriever:
     def __init__(self):
         self.client = OpenAI()
 
-    def retrieve(self, query: str, top_k: int = 10, only_latest = False) -> RetrievalResult:
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 10,
+        only_latest: bool = False,
+        retrieve_parent_chunks: bool = False,
+    ) -> RetrievalResult:
         """Retrieves the relevant document chunks using the OpenAI API."""
 
         query_embedding = self.client.embeddings.create(
@@ -32,13 +38,18 @@ class Retriever:
         with conn.cursor() as cursor:
 
             retrieval_query, query_params = self._get_retrieval_query(
-                cursor,
-                only_latest,
-                query_embedding,
-                top_k
+                cursor=cursor,
+                only_latest=only_latest,
+                query_embedding=query_embedding,
+                top_k=top_k,
+                retrieve_parent_chunks=retrieve_parent_chunks
             )
                 
-            chunks = self._fetch_top_k_chunks(cursor, retrieval_query, query_params)
+            chunks = self._fetch_top_k_chunks(
+                cursor=cursor,
+                retrieval_query=retrieval_query,
+                query_params=query_params,
+            )
 
         relevant_or_capped_chunks = self._apply_relevance_or_capped_filter(chunks)
 
@@ -50,7 +61,8 @@ class Retriever:
         cursor: Cursor,
         only_latest: bool,
         query_embedding: List[float],
-        top_k: int
+        top_k: int,
+        retrieve_parent_chunks: bool,
     ) -> Tuple[str, List[Any]]:
 
         latest_ingestion_id = None
@@ -60,10 +72,32 @@ class Retriever:
             )
             latest_ingestion_id = cursor.fetchone()[1]
 
+        where_clause = ""
+        if only_latest:
+            if retrieve_parent_chunks:
+                where_clause = f"WHERE intestion_id = %s"
+            else:
+                where_clause = "WHERE intestion_id = %s AND chunk_type = 'child'"
+        else:
+            if retrieve_parent_chunks:
+                pass
+            else:
+                where_clause = "WHERE chunk_type = 'child'"
+
         retrieval_query = f"""
-        SELECT file_name, chunk_index, content, embedding, metadata, embedding <=> %s AS distance
+        SELECT
+            source,
+            chunk_id,
+            chunk_type,
+            parent_chunk_id,
+            ingestion_id,
+            ingested_at,
+            content,
+            embedding,
+            metadata,
+            embedding <=> %s AS distance
         FROM file_chunks
-        {f"WHERE metadata->>'ingestion_id' = %s" if only_latest else ""}
+        {where_clause}
         ORDER BY distance ASC
         LIMIT %s
         """
