@@ -15,6 +15,7 @@ from tqdm import tqdm
 from pathlib import Path
 from uuid import uuid4
 from dotenv import load_dotenv
+import tiktoken
 
 load_dotenv()
 
@@ -35,6 +36,9 @@ class DocumentIngestor:
 
     def __init__(self):
         self.client = OpenAI()
+        self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
+
+        _ = self.tokenizer.encode("Initialize tokenizer")
 
 
     def ingest_file(
@@ -143,6 +147,13 @@ class DocumentIngestor:
         embeded_chunks = []
 
         for chunk in tqdm(chunks, desc="Embedding chunks", leave=False):
+
+            # check token count for parent tokens
+            if chunk.chunk_type == "parent":
+                token_count = len(self.tokenizer.encode(chunk.content))
+                if token_count > 8000:
+                    continue
+
             embedding = client.embeddings.create(
                 input=chunk.content,
                 model="text-embedding-3-small"
@@ -339,7 +350,7 @@ class DocumentIngestor:
                         chunk_id,
                         chunk_type,
                         parent_chunk_id,
-                        intestion_id,
+                        ingestion_id,
                         ingested_at,
                         embedding,
                         metadata
