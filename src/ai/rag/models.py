@@ -1,12 +1,39 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
+import uuid
 
+# chunk_id
+# chunk_type: "parent" | "child"
+# parent_id: nullable (null for parents)
+# source
+# ingestion_id
+# embedding
+# content
+
+@dataclass
+class ParentDocumentChunk:
+    content: str
+    source: str
+    chunk_id: int
+
+@dataclass
+class ChildDocumentChunk:
+    content: str
+    source: str
+    parent_chunk_id: int
+    chunk_id: int
 
 @dataclass
 class DocumentChunk:
     content: str
     source: str
+    chunk_type: str
+    chunk_id: str
+    ingestion_id: uuid.UUID
+    ingested_at: datetime
+    parent_chunk_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
 @dataclass
