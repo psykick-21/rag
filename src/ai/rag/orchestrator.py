@@ -31,6 +31,24 @@ class RAGOrchestrator:
         self.evaluator = ResponseEvaluator()
         self.query_analyzer = QueryAnalyzer()
 
+    def _should_include_parent_chunks(self, query: str) -> bool:
+        """
+        Rule-based routing: determines if parent chunks should be included.
+        
+        Returns True if query starts with:
+        - "What is"
+        - "Why"
+        - "Explain"
+        
+        Otherwise returns False (child chunks only).
+        """
+        query_lower = query.strip().lower()
+        return (
+            query_lower.startswith("what is") or
+            query_lower.startswith("why") or
+            query_lower.startswith("explain")
+        )
+
     def run(
         self,
         query: str,
@@ -58,8 +76,14 @@ class RAGOrchestrator:
         # STEP 2: RETRIEVE THE CHUNKS FOR EACH SUB-QUERY
         retrieval_results = []
         for sub_query in sub_queries:
-            retrieval_result = self.retriever.retrieve(sub_query, only_latest=only_latest)
-            logger.info(f"Retrieved {len(retrieval_result.chunks)} chunks for sub-query: {sub_query}")
+            # Rule-based routing: include parent chunks for "What is", "Why", "Explain" queries
+            retrieve_parent_chunks = self._should_include_parent_chunks(sub_query)
+            retrieval_result = self.retriever.retrieve(
+                sub_query, 
+                only_latest=only_latest,
+                retrieve_parent_chunks=retrieve_parent_chunks
+            )
+            logger.info(f"Retrieved {len(retrieval_result.chunks)} chunks for sub-query: {sub_query} (parent_chunks={retrieve_parent_chunks})")
             retrieval_results.extend(retrieval_result.chunks)
             debug_payload["sub_queries"].append(DebugUtils.calc_debug_metrics_for_sub_query(sub_query, retrieval_result))
         logger.info(f"Retrieved chunks = {len(retrieval_results)}")
