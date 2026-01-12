@@ -7,6 +7,7 @@ from pgvector.psycopg import Vector
 from psycopg import Cursor
 from dotenv import load_dotenv
 import json
+import uuid
 from typing import List, Tuple, Any
 
 load_dotenv()
@@ -75,9 +76,9 @@ class Retriever:
         where_clause = ""
         if only_latest:
             if retrieve_parent_chunks:
-                where_clause = f"WHERE intestion_id = %s"
+                where_clause = f"WHERE ingestion_id = %s"
             else:
-                where_clause = "WHERE intestion_id = %s AND chunk_type = 'child'"
+                where_clause = "WHERE ingestion_id = %s AND chunk_type = 'child'"
         else:
             if retrieve_parent_chunks:
                 pass
@@ -123,21 +124,36 @@ class Retriever:
         chunks = []
         if fetched_chunks:
             for chunk in fetched_chunks:
+                # Column order from SQL query:
+                # 0: source, 1: chunk_id, 2: chunk_type, 3: parent_chunk_id,
+                # 4: ingestion_id, 5: ingested_at, 6: content, 7: embedding,
+                # 8: metadata, 9: distance
 
-                # Parse metadata JSON if it's a string, otherwise use as-is
-                metadata = chunk[4]  # metadata column
+                # Parse metadata JSONB - psycopg should parse it automatically, but handle both cases
+                metadata = chunk[8]  # metadata column (JSONB)
                 if isinstance(metadata, str):
                     metadata = json.loads(metadata)
                 elif metadata is None:
                     metadata = {}
+                # If it's already a dict (from JSONB), use it as-is
+                
+                # Convert ingestion_id from TEXT to UUID
+                ingestion_id = chunk[4]  # ingestion_id column (TEXT in DB, UUID in model)
+                if isinstance(ingestion_id, str):
+                    ingestion_id = uuid.UUID(ingestion_id)
                 
                 chunks.append(RetrievedDocumentChunk(
                     chunk=DocumentChunk(
-                        content=chunk[2],  # content column
-                        source=chunk[0],   # file_name column
+                        content=chunk[6],  # content column
+                        source=chunk[0],   # source column
+                        chunk_type=chunk[2],  # chunk_type column
+                        chunk_id=str(chunk[1]),  # chunk_id column
+                        ingestion_id=ingestion_id,  # ingestion_id column (converted to UUID)
+                        ingested_at=chunk[5],  # ingested_at column
+                        parent_chunk_id=str(chunk[3]) if chunk[3] else None,  # parent_chunk_id column
                         metadata={**metadata, "chunk_index": chunk[1]}
                     ),
-                    distance=float(chunk[5])  # distance column
+                    distance=float(chunk[9])  # distance column
                 ))
         
         return chunks
